@@ -9,15 +9,21 @@ import (
 
 type user struct {
 	nick, pass, name string
-	chans []string
+	chans map[string]bool
 	active bool
 	mes chan string
 	act chan string
 }
 
+type ch struct {
+	mes chan string
+	act chan string
+	users map[string]bool
+}
+
 var (
 	users = make(map[string]*user)
-	chs [][]string
+	chs = make(map[string]*ch)
 )
 
 func cons(ln net.Listener) {
@@ -88,9 +94,13 @@ func login(con net.Conn) {
 				break
 			}
 		}
-		us := &user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10)}
+		us := &user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 100), chans: make(map[string]bool)}
 		if (search(n, p, u, nm)) {
 			_, ex := users[u]
+			if !ex && ch_nick(n) != nil {
+				con.Write([]byte("This nick is taken("))
+				continue
+			}
 			if !ex {
 				users[u] = us
 			}
@@ -105,31 +115,109 @@ func login(con net.Conn) {
 	}
 }
 
+func ch_handl(n string) {
+	//fmt.Println("I am ch_handl")
+	for {
+		select {
+		case msg := <- chs[n].mes:
+			for u, _ := range chs[n].users {
+				users[u].mes <- msg
+			}
+		case act := <- chs[n].act:
+			words := strings.Split(act, " ")
+			switch words[0] {
+			case "new":
+				chs[n].users[words[1]] = true
+				chs[n].mes <- "New user :" + words[1] + "\n"
+			case "left":
+				delete(chs[n].users, words[1])
+				chs[n].mes <- words[1] + "left((((" + "\n"
+			}
+		}
+	}
+}
+
+func ch_ex(s string) bool {
+	//fmt.Println("I am ch_ex")
+	_, ex := chs[s]
+	return ex
+}
+
+func uch_ex(u, s string) bool {
+	//fmt.Println("I am uch_ex")
+	_, ex := users[u].chans[s]
+	return ex
+}
+
 func inp(u string, sc *bufio.Scanner, con net.Conn) {
 	for sc.Scan() {
 		txt := strings.Split(sc.Text(), " ")
 		switch strings.ToLower(txt[0]) {
 		case "nick":
+			//fmt.Println("nick")
 			if sd := ch_nick(txt[1]); sd != nil {
 				users[u].nick = txt[1]
 			}
 		case "join":
+			//fmt.Println("join")
+			if len(txt) == 2 {
+				users[u].chans[txt[1]] = true
+				c, ex := chs[txt[1]]
+				if ex {
+					//fmt.Println("Adding to the channel")
+					c.act <- "new " + u
+				} else {
+					//fmt.Println("Creating a new channel")
+					chs[txt[1]] = &ch{act: make(chan string, 10), mes: make(chan string, 10), users: make(map[string]bool)}
+					chs[txt[1]].act <- "new " + u
+					//fmt.Println("go ch_handl")
+					go ch_handl(txt[1])
+				}
+			} else {
+				con.Write([]byte("Error name of channel"))
+			}
 		case "part":
+			//fmt.Println("part")
+			if len(txt) == 2 && ch_ex(txt[1]){
+				delete(users[u].chans, txt[1])
+				delete(chs[txt[1]].users, u)
+				chs[txt[1]].act <- "left" + u
+			} else {
+				con.Write([]byte("Error name of channel"))
+			}
 		case "who":
+			//fmt.Println("who")
 		case "names":
+			//fmt.Println("names")
 			for  _, nk := range users {
 				if nk.active == true {
 					con.Write([]byte(fmt.Sprintln(":server", nk.nick, " = \"*\"")))
 				}
 			}
 		case "list":
-		case "privmsg":
-			if us := ch_nick(txt[1]); us != nil && txt[2][0] == ":"[0] {
-				us.mes <- strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
+			//fmt.Println("list")
+			if len(txt) == 2 && ch_ex(txt[1]){
+				for u, _ := range chs[txt[1]].users {
+					con.Write([]byte(u + "\n"))
+				}
 			} else {
-				fmt.Println(users[u].nick, "wrote:", sc.Text())
+				con.Write([]byte("Error name of channel"))
 			}
-			default: fmt.Println(users[u].nick, "wrote:", sc.Text())
+		case "privmsg":
+			fmt.Println("privmsg")
+			us := ch_nick(txt[1]);
+			if us != nil && txt[2][0] == ":"[0] {
+				fmt.Println("Writing to the person")
+				us.mes <- strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
+			} else if ch_ex(txt[1]) && uch_ex(u, txt[1]) {
+				fmt.Println("Writing to the channel")
+				chs[txt[1]].mes <- u + " wrote: " + strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
+			} else {
+				fmt.Println(users[u].nick, "wrote:", strings.Join(txt, " "))
+			}
+		default:
+			fmt.Println("default")
+			fmt.Println(users[u].nick, "wrote:", strings.Join(txt, " "))
 		}
 	}
 	users[u].act <- "disconnected"
