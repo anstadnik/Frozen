@@ -138,7 +138,6 @@ func ch_handl(n string) {
 				chs[n].users[words[1]] = true
 				chs[n].mes <- "New user :" + words[1] + "\n"
 			case "left":
-				delete(chs[n].users, words[1])
 				chs[n].mes <- words[1] + "left((((" + "\n"
 			}
 		}
@@ -185,7 +184,7 @@ func inp(u string, sc *bufio.Scanner, con net.Conn) {
 				if len(txt) == 2 && ch_ex(txt[1]){
 					delete(users[u].chans, txt[1])
 					delete(chs[txt[1]].users, u)
-					chs[txt[1]].act <- "left" + u
+					chs[txt[1]].act <- "left " + u
 				} else {
 					con.Write([]byte("Error name of channel"))
 				}
@@ -200,17 +199,23 @@ func inp(u string, sc *bufio.Scanner, con net.Conn) {
 				}
 			case "list":
 				//fmt.Println("list")
-				if len(txt) == 2 && ch_ex(txt[1]){
-					for u, _ := range chs[txt[1]].users {
-						con.Write([]byte(u + "\n"))
+				if len(txt) == 1 {
+					for k, _ := range chs {
+						con.Write([]byte(k + "\n"))
+					}
+				} else if len(txt) > 1 {
+					for _, u := range txt[1:] {
+						if ch_ex(u) {
+							con.Write([]byte(u + "\n"))
+						}
 					}
 				} else {
-					con.Write([]byte("Error name of channel"))
+					con.Write([]byte("Error name of channel\n"))
 				}
 			case "privmsg":
 				fmt.Println("privmsg")
 				us := ch_nick(txt[1]);
-				if us != nil && txt[2][0] == ":"[0] && len(txt[2]) > 1 {
+				if  len(txt) > 2 && us != nil && txt[2][0] == ":"[0] && len(txt[2]) > 1 {
 					fmt.Println("Writing to the person")
 					us.mes <- strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
 				} else if us != nil && txt[2][0] == ":"[0] && len(txt[2]) == 1 {
@@ -222,9 +227,9 @@ func inp(u string, sc *bufio.Scanner, con net.Conn) {
 					fmt.Println(users[u].nick, "wrote:", strings.Join(txt, " "))
 				}
 			default:
-				if len(txt) == 3 && len(txt[2]) < 10 && ch_nick(txt[2]) == nil && txt[0][0] == ':' && txt[0][1:] == users[u].nick && txt[1] == "NICK" {
+				if len(txt) == 3 && len(txt[2]) < 10 && ch_nick(txt[2]) == nil && txt[0][0] == ':' && txt[0][1:] == users[u].nick && strings.ToLower(txt[1]) == "nick" {
 					users[u].nick = txt[2]
-				} else if len(txt) == 2 && txt[1] == "NICK" {
+				} else if len(txt) == 2 && strings.ToLower(txt[1]) == "nick" {
 					con.Write([]byte(fmt.Sprintln(":server 431", ":No nickname given")))
 				} else if len(txt) == 3 && ch_nick(txt[2]) != nil {
 					con.Write([]byte(fmt.Sprintln(":server 433", u, ":Nickname is alredy in use")))
