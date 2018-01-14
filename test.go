@@ -58,34 +58,40 @@ func login(con net.Conn) {
 		var n, p, u, nm string
 		sc := bufio.NewScanner(con)
 		for sc.Scan() {
-			st := strings.Split(sc.Text(), " ")
-			switch strings.ToLower(st[0]) {
-			case "pass":
-				if len(st) == 2 {
-					p = st[1]
-					fmt.Println("It's pass:", p)
-				} else {
-					fmt.Println("Wrong pass D:")
+			if sr  := sc.Text(); len(sr) < 511 {
+				st := strings.Split(sr, " ");
+				switch strings.ToLower(st[0]) {
+				case "pass":
+					if len(st) == 2 {
+						p = st[1]
+						fmt.Println("It's pass:", p)
+					} else if len(st) == 1 {
+						con.Write([]byte(fmt.Sprintln(":server 461",  strings.ToUpper(st[0]), ":Not enough parametrs")))
+					} else {
+						fmt.Println("Wrong pass D:")
+					}
+				case "nick":
+					if len(st) == 2 && len(st[1]) < 10 {
+						n = st[1]
+						fmt.Println("It's nick :", n)
+					} else {
+						con.Write([]byte(fmt.Sprintln(":nickserv@service. NOTICE", st[1], ":This nickname is registered. Please choose a different nickname, or identify via /msg nickserv identify <password>.")))
+						fmt.Println("Wrong nick D:")
+					}
+						con.Write([]byte(fmt.Sprintln(":server 461",  strings.ToUpper(st[0]), ":Not enough parametrs")))
+				case "user":
+					if len(st) > 4 && st[4][0] == ":"[0]{
+						u = st[1]
+						nm = strings.TrimPrefix(strings.Join(st[4:], " "), ":")
+						fmt.Println("It's user:", u)
+					} else {
+						fmt.Println("Wrong user D:")
+					}
+					default : con.Write([]byte(fmt.Sprintln(":server 451 :You have not registered")))
 				}
-			case "nick":
-				if len(st) == 2 {
-					n = st[1]
-					fmt.Println("It's nick :", n)
-				} else {
-					fmt.Println("Wrong nick D:")
+				if len(n) > 0 && len(u) > 0 {
+					break
 				}
-			case "user":
-				if len(st) > 4 && st[4][0] == ":"[0]{
-					u = st[1]
-					nm = strings.TrimPrefix(strings.Join(st[4:], " "), ":")
-					fmt.Println("It's user:", u)
-				} else {
-					fmt.Println("Wrong user D:")
-				}
-				default : fmt.Println("Nor user, pass or nick :(  : ", st)
-			}
-			if len(n) > 0 && len(u) > 0 {
-				break
 			}
 		}
 		us := &user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10)}
@@ -94,7 +100,7 @@ func login(con net.Conn) {
 			if !ex {
 				users[u] = us
 			}
-			con.Write([]byte(fmt.Sprintln(":server 001 ", u, ": Hehey you're welcome")))
+			con.Write([]byte(fmt.Sprintln(":server 001 ", u, ": Hehey you're welcome", u)))
 			users[u].active = true
 			go hand(u, sc, con)
 			break
@@ -107,29 +113,43 @@ func login(con net.Conn) {
 
 func inp(u string, sc *bufio.Scanner, con net.Conn) {
 	for sc.Scan() {
-		txt := strings.Split(sc.Text(), " ")
-		switch strings.ToLower(txt[0]) {
-		case "nick":
-			if sd := ch_nick(txt[1]); len(txt) == 2 && sd != nil {
-				users[u].nick = txt[1]
+		if sr := sc.Text(); len(sr) < 511 {
+			txt := strings.Split(sr, " ")
+		/*	if sd := ch_nick(txt[2]); len(txt[2]) < 10 && len(txt) == 3 && sd != nil && txt[0][0] == ':' && &txt[0][1] == users[u].nick && txt[1] == "NICK" {
+				users[u].nick = txt[2]
+			} else if len(txt) == 1 {
+				con.Write([]byte(fmt.Sprintln(":server 431", ":No nickname given")))
+			} else if sd == nil {
+				con.Write([]byte(fmt.Sprintln(":server 433", u, ":Nickname is alredy in use")))
+			} else if sd != nil && len(txt) == 3 && len(txt[2]) > 10 && txt[0][0] == ':' && &txt[0][1] == users[u].nick && txt[1] == "NICK" {
+				con.Write([]byte(fmt.Sprintln(":server 432", u, ":Errorneus nickname")))
 			}
-		case "join":
-		case "part":
-		case "who":
-		case "names":
-			for  _, nk := range users {
-				if nk.active == true {
-					con.Write([]byte(fmt.Sprintln(":server", nk.nick, " = \"*\"")))
+				*/
+			switch strings.ToLower(txt[0]) {
+			case "nick":
+				if sd := ch_nick(txt[1]); len(txt) == 2 && sd != nil {
+					users[u].nick = txt[1]
 				}
+			case "join":
+			case "part":
+			case "who":
+			case "names":
+				for  _, nk := range users {
+					if nk.active == true {
+						con.Write([]byte(fmt.Sprintln(":server", nk.nick, " = \"*\"")))
+					}
+				}
+			case "list":
+			case "privmsg":
+				if us := ch_nick(txt[1]); us != nil && txt[2][0] == ":"[0] && len(txt[2]) > 1 {
+					us.mes <- strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
+				} else if us != nil && txt[2][0] == ":"[0] && len(txt[2]) == 1 {
+					con.Write([]byte(fmt.Sprintln(":server 412", u, ":No text to send")))
+				} else {
+					fmt.Println(users[u].nick, "wrote:", sc.Text())
+				}
+				default: fmt.Println(users[u].nick, "wrote:", sc.Text())
 			}
-		case "list":
-		case "privmsg":
-			if us := ch_nick(txt[1]); us != nil && txt[2][0] == ":"[0] {
-				us.mes <- strings.TrimPrefix(strings.Join(txt[2:], " ") + "\n", ":")
-			} else {
-				fmt.Println(users[u].nick, "wrote:", sc.Text())
-			}
-			default: fmt.Println(users[u].nick, "wrote:", sc.Text())
 		}
 	}
 	users[u].act <- "disconnected"
