@@ -54,50 +54,54 @@ func search(n, p, u, nm string) bool {
 }
 
 func login(con net.Conn) {
-	var n, p, u, nm string
-	sc := bufio.NewScanner(con)
-	for sc.Scan() {
-		st := strings.Split(sc.Text(), " ")
-		switch strings.ToLower(st[0]) {
-		case "pass":
-			if len(st) == 2 {
-				p = st[1]
-				fmt.Println("It's pass:", p)
-			} else {
-				fmt.Println("Wrong pass D:")
-			}
-		case "nick":
-			if len(st) == 2 {
-				n = st[1]
-				fmt.Println("It's nick :", n)
-			} else {
-				fmt.Println("Wrong nick D:")
-			}
-		case "user":
-			if len(st) > 4 && st[4][0] == ":"[0]{
-				u = st[1]
-				nm = strings.TrimPrefix(strings.Join(st[4:], " "), ":")
-				fmt.Println("It's user:", u)
-			} else {
-				fmt.Println("Wrong user D:")
-			}
-			default : fmt.Println("Nor user, pass or nick :(  : ", st)
-		}
-		if len(n) > 0 && len(u) > 0 {
-			us := &user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10)}
-			if (search(n, p, u, nm)) {
-				_, ex := users[u]
-				if !ex {
-					users[u] = us
-					con.Write([]byte(fmt.Sprintln(":server 001 ", u, ": Hehey you're welcome")))
+	for {
+		var n, p, u, nm string
+		sc := bufio.NewScanner(con)
+		for sc.Scan() {
+			st := strings.Split(sc.Text(), " ")
+			switch strings.ToLower(st[0]) {
+			case "pass":
+				if len(st) == 2 {
+					p = st[1]
+					fmt.Println("It's pass:", p)
+				} else {
+					fmt.Println("Wrong pass D:")
 				}
-				users[u].active = true
-				go hand(u, sc, con)
+			case "nick":
+				if len(st) == 2 {
+					n = st[1]
+					fmt.Println("It's nick :", n)
+				} else {
+					fmt.Println("Wrong nick D:")
+				}
+			case "user":
+				if len(st) > 4 && st[4][0] == ":"[0]{
+					u = st[1]
+					nm = strings.TrimPrefix(strings.Join(st[4:], " "), ":")
+					fmt.Println("It's user:", u)
+				} else {
+					fmt.Println("Wrong user D:")
+				}
+				default : fmt.Println("Nor user, pass or nick :(  : ", st)
+			}
+			if len(n) > 0 && len(u) > 0 {
 				break
-			} else {
-				con.Write([]byte(fmt.Sprintln("There is such a user and ur data doesn't match his one. Try again")))
 			}
 		}
+		us := &user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10)}
+		if (search(n, p, u, nm)) {
+			_, ex := users[u]
+			if !ex {
+				users[u] = us
+			}
+			con.Write([]byte(fmt.Sprintln(":server 001 ", u, ": Hehey you're welcome")))
+			users[u].active = true
+			go hand(u, sc, con)
+			break
+		} else {
+			con.Write([]byte(fmt.Sprintln("There is such a user and ur data doesn't match his one. Try again")))
+		}
+
 	}
 }
 
@@ -155,7 +159,7 @@ func main() {
 	fmt.Println("Launching server...")
 
 	// listen on all interfaces
-	ln, _ = net.Listen("tcp", ":8081")
+	ln, _ := net.Listen("tcp", ":8081")
 
 	go cons(ln)
 	for {
