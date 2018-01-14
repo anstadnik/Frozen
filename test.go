@@ -106,7 +106,7 @@ func inp(u string, sc *bufio.Scanner, con net.Conn) {
 		txt := strings.Split(sc.Text(), " ")
 		switch strings.ToLower(txt[0]) {
 		case "nick":
-			if sd := ch_nick(txt[1]); sd != nil {
+			if sd := ch_nick(txt[1]); len(txt) == 2 && sd != nil {
 				users[u].nick = txt[1]
 			}
 		case "join":
