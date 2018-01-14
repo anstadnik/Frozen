@@ -12,6 +12,7 @@ type user struct {
 	chans []string
 	mes chan string
 	act chan string
+	active bool
 }
 
 var (
@@ -71,7 +72,7 @@ func login(con net.Conn) {
 		}
 	}
 	if len(n) > 0 && len(u) > 0 {
-		users[u] = user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10)}
+		users[u] = user{nick: n, pass: p, name: nm, act: make(chan string, 10), mes: make(chan string, 10), active: true}
 		con.Write([]byte(fmt.Sprintln(":server 001 ", u, ": Hehey you're welcome")))
 		go hand(u, sc, con)
 	}
@@ -99,6 +100,7 @@ func hand(u string, sc *bufio.Scanner, con net.Conn) {
 		case act := <- users[u].act:
 			switch act {
 			case "disconnected":
+				users[u].active = false
 				break f
 			}
 		}
