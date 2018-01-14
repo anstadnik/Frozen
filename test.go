@@ -82,16 +82,24 @@ func login(con net.Conn) {
 	}
 }
 
-func inp(u string, sc *bufio.Scanner) {
+func inp(u string, sc *bufio.Scanner, con net.Conn) {
 	for sc.Scan() {
 		txt := strings.Split(sc.Text(), " ")
 		switch strings.ToLower(txt[0]) {
 		case "nick":
+			if sd := ch_nick(txt[1]); sd != nil {
+				users[u].nick = txt[1]
+			}
 		case "join":
 		case "part":
 		case "who":
 			fallthrough
 		case "names":
+			for  _, nk := range users {
+				if nk.active == true {
+					con.Write([]byte(fmt.Sprintln(":server", nk.nick, " = \"*\"")))
+				}
+			}
 		case "list":
 		case "privmsg":
 			if us := ch_nick(txt[1]); us != nil && txt[2][0] == ":"[0] {
@@ -106,7 +114,7 @@ func inp(u string, sc *bufio.Scanner) {
 }
 
 func hand(u string, sc *bufio.Scanner, con net.Conn) {
-	go inp(u, sc)
+	go inp(u, sc, con)
 	f:
 	for {
 		select {
